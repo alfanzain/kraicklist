@@ -8,5 +8,47 @@ services:
       - ./typesense-data:/data
     command: >
       --data-dir /data
-      --api-key=xyz
+      --api-key=${SEARCH_ENGINE_API_KEY}
       --enable-cors
+    networks:
+      - app-network
+
+  kraicklist-app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: kraicklist-app
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    environment:
+      - PORT=${PORT}
+      - SEARCH_ENGINE_API_URL=${SEARCH_ENGINE_API_URL}
+      - SEARCH_ENGINE_API_KEY=${SEARCH_ENGINE_API_KEY}
+      - SEARCH_ENGINE_COLLECTION_NAME=${SEARCH_ENGINE_COLLECTION_NAME}
+      - DATA_FILE=${DATA_FILE}
+    volumes:
+      - ./data.txt:/root/data.txt
+    command: ["sh", "-c", "sleep 15 && ./main"]
+    depends_on:
+      - typesense
+    networks:
+      - app-network
+
+  nginx:
+    image: nginx:alpine
+    container_name: nginx-proxy
+    restart: unless-stopped
+    ports:
+      - "80:80"
+    volumes:
+      - ./nginx.conf:/etc/nginx/conf.d/default.conf
+    depends_on:
+      kraicklist-app:
+        condition: service_started
+    networks:
+      - app-network
+
+networks:
+  app-network:
+    driver: bridge
