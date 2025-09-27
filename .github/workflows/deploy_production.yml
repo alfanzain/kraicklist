@@ -29,6 +29,12 @@ jobs:
             echo "Pulling latest code..."
             git pull origin master
 
+            export PORT=${{ secrets.PORT }}
+            export SEARCH_ENGINE_API_URL=${{ secrets.SEARCH_ENGINE_API_URL }}
+            export SEARCH_ENGINE_API_KEY=${{ secrets.SEARCH_ENGINE_API_KEY }}
+            export SEARCH_ENGINE_COLLECTION_NAME=${{ secrets.SEARCH_ENGINE_COLLECTION_NAME }}
+            export DATA_FILE=${{ secrets.DATA_FILE }}
+
             echo "Run docker compose..."
             make run
 

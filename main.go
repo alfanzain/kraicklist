@@ -36,7 +36,7 @@ func main() {
 	if err != nil {
 		log.Fatalf("failed initialize search engine: %v", err)
 	}
-	searchEngine.ImportData("data.txt")
+	// searchEngine.ImportData("data.txt")
 
 	// initialize service
 	svc, err := core.NewService(core.ServiceConfig{
