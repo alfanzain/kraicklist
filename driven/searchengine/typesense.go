@@ -167,6 +167,7 @@ func (se *TypesenseSearchEngine) DropCollection() (bool, error) {
 
 	respStr, err := se.doRequest(http.MethodDelete, url, nil)
 	if err != nil {
+		fmt.Println("Error dropping collection:", err)
 		return false, err
 	}
 
@@ -185,13 +186,10 @@ func (se *TypesenseSearchEngine) DropCollection() (bool, error) {
 }
 
 func (se *TypesenseSearchEngine) ImportData(filepath string) (string, error) {
-	_, err := se.DropCollection()
+	se.DropCollection()
+	_, err := se.CreateCollection()
 	if err != nil {
-		return "", err
-	}
-
-	_, err = se.CreateCollection()
-	if err != nil {
+		fmt.Println("Error creating collection:", err)
 		return "", err
 	}
 
