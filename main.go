@@ -55,7 +55,7 @@ func main() {
 	}
 
 	// start server
-	fmt.Printf("Server is listening on %s...", cfg.Port)
+	fmt.Println("Server is listening on", cfg.Port)
 	err = http.ListenAndServe(fmt.Sprintf(":%s", cfg.Port), api.GetHandler())
 	if err != nil {
 		log.Fatalf("unable to start server due: %v", err)

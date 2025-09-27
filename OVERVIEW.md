@@ -9,7 +9,7 @@
 - [Features](#features)
 - [Prerequisites](#prerequisites)
 - [Quick Start](#quick-start)
-- [Recommendation](#recommendation)
+- [Indexes](#indexes)
 
 ## Demo
 - 
@@ -49,5 +49,12 @@ Docker
 - Run `make run`
 - Open `http://localhost:8080`
 
-## Recommendation
-- 
+## Indexes
+
+Get the collection
+
+```
+curl -H "X-TYPESENSE-API-KEY: ${SEARCH_ENGINE_API_KEY}" \
+     -X GET \
+    "http://localhost:8108/collections/ads"
+```
