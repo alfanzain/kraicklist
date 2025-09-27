@@ -19,8 +19,8 @@ services:
       dockerfile: Dockerfile
     container_name: kraicklist-app
     restart: unless-stopped
-    ports:
-      - "8080:8080"
+    expose:
+      - "8080"
     environment:
       - PORT=${PORT}
       - SEARCH_ENGINE_API_URL=${SEARCH_ENGINE_API_URL}
@@ -63,7 +63,7 @@ services:
     command: >
       certonly --webroot 
       --webroot-path=/var/www/certbot 
-      --email alfanzaindev@domain.com
+      --email alfanzaindev@gmail.com
       --agree-tos 
       --no-eff-email 
       -d kraicklist.my.id 
