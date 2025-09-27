@@ -1,0 +1,35 @@
+name: Deploy Production
+
+on:
+  push:
+    branches: ["master"]
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment: production
+    timeout-minutes: 60
+
+    steps:
+      - name: Checkout Commit
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+
+      - name: Deploy to VPS
+        uses: appleboy/ssh-action@v1.1.0
+        with:
+          username: ${{ secrets.SERVER_USER }}
+          host: ${{ secrets.SERVER_HOST }}
+          key: ${{ secrets.SERVER_SSH_KEY }}
+          timeout: 60m 
+          script: |
+            cd ~/kraicklist || exit 0
+
+            echo "Pulling latest code..."
+            git pull origin master
+
+            echo "Run docker compose..."
+            make run
+
+            echo "Deployment finished ✅"

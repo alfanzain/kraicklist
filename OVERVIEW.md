@@ -8,7 +8,6 @@
 - [Demo](#demo)
 - [Features](#features)
 - [Prerequisites](#prerequisites)
-- [Installation](#installation)
 - [Quick Start](#quick-start)
 - [Recommendation](#recommendation)
 
@@ -23,7 +22,9 @@
 - Docker
 - Docker Compose
 
-## Installation
+## Quick Start
+Manual
+
 - Setup environment variables on `.env`
     ```
     PORT=8080
@@ -32,10 +33,20 @@
     SEARCH_ENGINE_COLLECTION_NAME=ads
     DATA_FILE=data.txt
     ```
-- Setup the `Typesense` by run `docker compose up -d` 
+- Run `go run main.go`
+- Open `http://localhost:8080`
 
-## Quick Start
-- Use `go run main.go` command
+Docker
+
+- Setup environment variables
+    ```
+    export PORT=8080
+    export SEARCH_ENGINE_API_URL=http://typesense:8108
+    export SEARCH_ENGINE_API_KEY=xyz
+    export SEARCH_ENGINE_COLLECTION_NAME=ads
+    export DATA_FILE=data.txt
+    ```
+- Run `make run`
 - Open `http://localhost:8080`
 
 ## Recommendation
