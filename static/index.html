@@ -2,58 +2,456 @@
 <html lang="en">
 
 <head>
-    <meta charset="UTF-8">
-    <meta http-equiv="X-UA-Compatible" content="IE=edge">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>KraickList - Find Your Needs Here</title>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Kraicklist</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen,
+                Ubuntu, Cantarell, "Open Sans", "Helvetica Neue", sans-serif;
+        }
+    </style>
 </head>
 
-<body>
-    <div>
-        <form id="form" autocomplete="off">
-            <input type="text" id="query" name="query">
-            <button type="submit">Search</button>
-        </form>
+<body class="bg-white min-h-screen text-gray-900">
+    <div class="container mx-auto px-4 pt-8 pt-2 max-w-5xl">
+        <header class="hidden md:block text-center mb-12">
+            <h1 class="text-5xl font-extrabold tracking-tight mb-2">Kraicklist</h1>
+            <p class="text-gray-600 text-lg max-w-xl mx-auto">Find your perfect item from our listings</p>
+        </header>
+
+        <section class="max-w-2xl mx-auto mb-4">
+            <div class="relative">
+                <input id="searchQuery" type="text" placeholder="Search an iPhone, car, or goat..."
+                    class="w-full border border-gray-300 rounded-xl py-4 pl-4 pr-20 text-lg placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-black focus:border-black transition"
+                    onkeypress="handleKeyPress(event)" autocomplete="off" />
+                <div class="absolute inset-y-0 right-4 flex items-center pointer-events-none text-gray-500">
+                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5"
+                        stroke="currentColor" class="w-6 h-6">
+                        <path stroke-linecap="round" stroke-linejoin="round"
+                            d="m21 21-5.197-5.197m0 0A7.5 7.5 0 1 0 5.196 5.196a7.5 7.5 0 0 0 10.607 10.607Z" />
+                    </svg>
+                </div>
+                <div id="recentSearches"
+                    class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 hidden">
+                    <div
+                        class="bg-white w-[95vw] h-[95vh] rounded-xl shadow-lg overflow-auto relative p-6 max-w-full max-h-full flex flex-col">
+                        <button id="closeRecentSearchBtn" aria-label="Back"
+                            class="my-4 mb-8 text-gray-700 hover:text-red-600 focus:outline-none flex items-center">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24"
+                                stroke="currentColor" stroke-width="2">
+                                <path stroke-linecap="round" stroke-linejoin="round" d="M15 19l-7-7 7-7" />
+                            </svg>
+                        </button>
+                        <input id="modalSearchQuery" type="text" placeholder="Search an iPhone, car, or goat..."
+                            class="mb-4 w-full border border-gray-300 rounded-xl py-3 px-4 text-lg placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-black focus:border-black transition"
+                            autocomplete="off" />
+                        <div id="recentSearchesContent" class="flex-grow overflow-auto"></div>
+                        <button id="clearAllRecentsBtn" 
+                            class="mt-4 px-6 py-3 bg-red-50 text-red-600 border border-red-200 rounded-xl hover:bg-red-100 hover:border-red-300 transition-colors duration-200 flex items-center justify-center gap-2 font-medium">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                            </svg>
+                            Clear Search History
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <div id="quickFilters" class="flex gap-3 mt-6 overflow-x-auto whitespace-nowrap">
+                <!-- Quick filter buttons will be dynamically generated here -->
+            </div>
+        </section>
     </div>
-    <div>
-        <ul id="resultList"></ul>
+
+    <div class="container mx-auto px-4 pb-4 max-w-5xl">
+        <div id="searchStats" class="text-center mb-4 mt-12 text-gray-600"></div>
+        <div id="searchPerPage" class="text-center mb-4 text-gray-600"></div>
+        <section id="searchResults" class="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 max-w-7xl mx-auto"></section>
     </div>
+
+    <div id="detailModal" class="fixed inset-0 bg-black bg-opacity-70 flex flex-col hidden z-50">
+        <header class="flex items-center p-4 border-b border-gray-300 bg-white">
+            <button id="modalCloseBtn"
+                class="flex items-center gap-2 text-gray-700 hover:text-gray-900 text-lg font-semibold">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24"
+                    stroke="currentColor" stroke-width="2">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M15 19l-7-7 7-7" />
+                </svg>
+            </button>
+        </header>
+        <main id="modalContent" class="flex-grow overflow-auto p-6 space-y-6 bg-white"></main>
+    </div>
+
     <script>
-        const Controller = {
-            search: (ev) => {
-                ev.preventDefault();
-                const data = Object.fromEntries(new FormData(form));
-                const response = fetch(`/search?q=${data.query}`).then((response) => {
-                    response.json().then((results) => {
-                        if (!results) {
-                            alert(`No result for ${data.query}`);
-                            return
-                        }
-                        Controller.updateList(results);
-                    });
-                });
-            },
+        const recentSearches = document.getElementById('recentSearches');
+        const closeRecentSearchBtn = document.getElementById('closeRecentSearchBtn');
+        const recentSearchesContent = document.getElementById('recentSearchesContent');
+        const searchQuery = document.getElementById('searchQuery');
+        const modalSearchQuery = document.getElementById('modalSearchQuery');
 
-            updateList: (results) => {
-                const rows = [];
-                for (let result of results) {
-                    rows.push(
-                        `
-                            <li>
-                                <div>
-                                    <p>${result.title}</p>
-                                    <p>${result.content}</p>
-                                </div>
-                            </li>
-                        `
-                    );
+        const tags = [
+            "Car brands",
+            "Used cars",
+            "Automatic gear",
+            "Petrol",
+            "Rent",
+            "Transport services",
+            "Home furniture",
+            "Electronics",
+            "Perfumes",
+            "Children's products",
+            "Industrial equipment",
+            "Mobile phones",
+            "Real estate",
+            "Fashion"
+        ];
+
+        // Generate quick filter buttons from tags array
+        function generateQuickFilters() {
+            const quickFiltersContainer = document.getElementById('quickFilters');
+            quickFiltersContainer.innerHTML = '';
+            
+            // Shuffle the tags array and get first 10 random tags
+            const shuffledTags = [...tags].sort(() => Math.random() - 0.5);
+            const randomTags = shuffledTags.slice(0, Math.min(10, tags.length));
+            
+            randomTags.forEach(tag => {
+                const button = document.createElement('button');
+                button.onclick = () => quickSearch(tag);
+                button.className = 'px-5 py-2 text-sm text-black border border-gray-300 rounded-xl hover:bg-gray-100 transition flex-shrink-0';
+                button.textContent = tag;
+                quickFiltersContainer.appendChild(button);
+            });
+        }
+
+        // Initialize quick filters on page load
+        generateQuickFilters();
+
+        searchQuery.addEventListener('focus', () => {
+            updateRecentSearches();
+            modalSearchQuery.value = searchQuery.value;
+            recentSearches.classList.remove('hidden');
+            setTimeout(() => modalSearchQuery.focus(), 0);
+        });
+
+        let searchTimeout;
+
+        modalSearchQuery.addEventListener('input', () => {
+            searchQuery.value = modalSearchQuery.value;
+            
+            clearTimeout(searchTimeout);
+            
+            searchTimeout = setTimeout(() => {
+                if (modalSearchQuery.value.trim()) {
+                    performSearch();
+                    recentSearches.classList.add('hidden');
                 }
-                resultList.innerHTML = rows.join(" ");
-            },
-        };
+            }, 1200);
+        });
 
-        const form = document.getElementById("form");
-        form.addEventListener("submit", Controller.search);
+        modalSearchQuery.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') {
+                performSearch();
+                recentSearches.classList.add('hidden');
+            }
+        });
+
+        closeRecentSearchBtn.addEventListener('click', () => {
+            console.log('close button clicked');
+            recentSearches.classList.add('hidden');
+        });
+
+        recentSearches.addEventListener('click', (e) => {
+            if (e.target === recentSearches) {
+                recentSearches.classList.add('hidden');
+            }
+        });
+
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape' && !recentSearches.classList.contains('hidden')) {
+                recentSearches.classList.add('hidden');
+                searchQuery.blur();
+            }
+        });
+
+        let searches = JSON.parse(localStorage.getItem('recentSearches')) || [];
+        let currentPage = 1;
+        let totalPages = 1;
+        let isLoading = false;
+        let hasMoreResults = true;
+        let currentQuery = '';
+
+        function updateRecentSearches() {
+            searches = JSON.parse(localStorage.getItem('recentSearches')) || [];
+            recentSearchesContent.innerHTML = '';
+
+            if (searches.length === 0) {
+                recentSearchesContent.innerHTML = '<p class="p-3 text-gray-400">No recent searches</p>';
+                return;
+            }
+
+            searches.slice(-10).reverse().forEach(search => {
+                const item = document.createElement('div');
+                item.className = 'px-6 py-3 cursor-pointer flex items-center gap-2 hover:bg-gray-100 transition';
+                item.setAttribute('role', 'button');
+                item.tabIndex = 0;
+
+                const clockIcon = document.createElement('span');
+                clockIcon.className = 'flex-shrink-0';
+                clockIcon.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-5 h-5 text-gray-500"><path stroke-linecap="round" stroke-linejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z"/></svg>`;
+
+                const text = document.createElement('span');
+                text.className = 'truncate';
+                text.textContent = search;
+
+                item.appendChild(clockIcon);
+                item.appendChild(text);
+
+                item.addEventListener('click', (e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+
+                    searchQuery.value = search;
+                    modalSearchQuery.value = search;
+
+                    recentSearches.classList.add('hidden');
+
+                    if (typeof performSearch === 'function') {
+                        performSearch();
+                    }
+                });
+
+                item.addEventListener('keydown', (e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                        e.preventDefault();
+                        item.click();
+                    }
+                });
+
+                recentSearchesContent.appendChild(item);
+            });
+        }
+
+        async function performSearch(isNewSearch = true) {
+            if (isLoading) return;
+            let query = searchQuery.value.trim();
+
+            if (!query) {
+                query = tags[Math.floor(Math.random() * tags.length)];
+            }
+
+            if (isNewSearch) {
+                currentQuery = query;
+                currentPage = 1;
+                totalPages = 1;
+                hasMoreResults = true;
+                document.getElementById('searchResults').innerHTML = `
+                    <div class="col-span-full text-center py-6">
+                        <div class="animate-spin rounded-full h-12 w-12 border-b-2 border-gray-900 mx-auto mb-4"></div>
+                        <p class="text-gray-600">Searching item listings...</p>
+                    </div>`;
+            } else {
+                const resultsContainer = document.getElementById('searchResults');
+                const loadingDiv = document.createElement('div');
+                loadingDiv.id = 'loadingMore';
+                loadingDiv.className = 'col-span-full text-center py-6';
+                loadingDiv.innerHTML = `
+                    <div class="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900 mx-auto mb-2"></div>
+                    <p class="text-gray-600">Loading more...</p>`;
+                resultsContainer.appendChild(loadingDiv);
+            }
+
+            isLoading = true;
+
+            try {
+                let url = `/api/v1/search?q=${encodeURIComponent(currentQuery)}`;
+
+                if (!isNewSearch && currentPage > 1) {
+                    url += `&page=${currentPage}`;
+                }
+
+                const response = await fetch(url);
+                const data = await response.json();
+
+                if (!data.data || !data.data.hits || data.data.hits.length === 0) {
+                    if (isNewSearch) {
+                        document.getElementById('searchStats').innerHTML = `
+                            <h3 class="text-2xl font-semibold text-gray-600 mb-3">No item found</h3>
+                            <p class="text-gray-500 max-w-md mx-auto">Try adjusting your search terms<br/>or browse all available listings</p>`;
+                    }
+                    hasMoreResults = false;
+                    return;
+                }
+
+                totalPages = Math.ceil(data.data.found / data.data.request_params.per_page);
+
+                renderSearchResults(data, isNewSearch);
+
+                currentPage++;
+                hasMoreResults = currentPage <= totalPages;
+
+                searches = searches.filter(s => s !== query);
+                searches.push(query);
+                localStorage.setItem('recentSearches', JSON.stringify(searches));
+            } catch (error) {
+                console.error('Search error:', error);
+                if (isNewSearch) {
+                    document.getElementById('searchResults').innerHTML = `
+                        <div class="col-span-full text-center py-12">
+                            <div class="text-red-600 text-2xl mb-2 select-none">⚠️</div>
+                            <p class="text-gray-600">Error searching listings. Please try again.</p>
+                        </div>`;
+                }
+            } finally {
+                isLoading = false;
+                const loadingIndicator = document.getElementById('loadingMore');
+                if (loadingIndicator) loadingIndicator.remove();
+            }
+        }
+
+        function renderSearchResults(response, isNewSearch = true) {
+            const resultsContainer = document.getElementById('searchResults');
+            if (isNewSearch) resultsContainer.innerHTML = '';
+
+            response.data.hits.forEach(hit => {
+                const doc = hit.document;
+                const card = createListingCard(doc);
+                resultsContainer.appendChild(card);
+            });
+
+            const loadingIndicator = document.getElementById('loadingMore');
+            if (loadingIndicator) loadingIndicator.remove();
+        }
+
+        function createListingCard(doc) {
+            const card = document.createElement('div');
+            card.className = 'bg-white rounded-2xl shadow-lg hover:shadow-2xl transition-shadow duration-300 overflow-hidden border border-gray-200 flex items-center space-x-4 p-4 max-w-xl cursor-pointer';
+
+            card.innerHTML = `
+                <div class="flex-shrink-0 w-32 h-24 relative rounded-lg overflow-hidden">
+                    <img 
+                        src="${(doc.image_urls && doc.image_urls[0]) || doc.thumb_url || '/api/placeholder/300/200'}" 
+                        alt="${doc.title}"
+                        class="w-full h-full object-cover"
+                        onerror="this.src='/api/placeholder/300/200'"
+                    />
+                </div>
+                <div class="flex flex-col flex-grow min-w-0">
+                    <h3 class="text-lg font-semibold text-gray-900 mb-1 line-clamp-2">${doc.title}</h3>
+                    <p class="text-gray-600 text-sm line-clamp-3">${doc.content.substring(0, 120)}...</p>
+                </div>
+            `;
+
+            card.addEventListener('click', () => {
+                const modal = document.getElementById('detailModal');
+                const modalContent = document.getElementById('modalContent');
+
+                let galleryHTML = '';
+                if (doc.image_urls && doc.image_urls.length > 0) {
+                    if (doc.image_urls.length === 1) {
+                        galleryHTML = `
+                            <img src="${doc.image_urls[0]}" alt="${doc.title}"
+                                class="w-full max-w-md md:max-w-sm h-auto rounded-lg mb-4 object-cover mx-auto" />
+                        `;
+                    } else {
+                        galleryHTML = `
+                            <div class="mb-4">
+                                <div class="relative">
+                                    <img id="mainImage" src="${doc.image_urls[0]}" alt="${doc.title}"
+                                        class="w-full max-w-md md:max-w-sm h-auto rounded-lg object-cover mx-auto" />
+                                </div>
+                                <div class="flex gap-2 mt-3 overflow-x-auto justify-center">
+                                    ${doc.image_urls.map((url, index) => `
+                                        <img src="${url}" alt="${doc.title} ${index + 1}"
+                                            class="w-16 h-16 object-cover rounded cursor-pointer border-2 ${index === 0 ? 'border-blue-500' : 'border-gray-300'} hover:border-blue-400 transition-colors flex-shrink-0"
+                                            onclick="changeMainImage('${url}', this)" />
+                                    `).join('')}
+                                </div>
+                            </div>
+                        `;
+                    }
+                } else {
+                    galleryHTML = `
+                        <img src="${doc.thumb_url}" alt="${doc.title}"
+                            class="w-full max-w-md md:max-w-sm h-auto rounded-lg mb-4 object-cover mx-auto" />
+                    `;
+                }
+
+                modalContent.innerHTML = `
+                    <h1 class="text-2xl font-bold text-gray-900 mb-4">${doc.title}</h1>
+                    ${galleryHTML}
+                    <p class="text-gray-700 whitespace-pre-wrap">${doc.content}</p>
+                `;
+
+                modal.classList.remove('hidden');
+                document.body.style.overflow = 'hidden';
+            });
+
+            return card;
+        }
+
+        function quickSearch(term) {
+            searchQuery.value = term;
+            modalSearchQuery.value = term;
+            performSearch();
+        }
+
+        function handleKeyPress(event) {
+            if (event.key === 'Enter') {
+                performSearch();
+            }
+        }
+
+        const modal = document.getElementById('detailModal');
+        const modalCloseBtn = document.getElementById('modalCloseBtn');
+
+        modalCloseBtn.addEventListener('click', closeModal);
+        modal.addEventListener('click', (e) => {
+            if (e.target === modal) closeModal();
+        });
+
+        function closeModal() {
+            modal.classList.add('hidden');
+            document.body.style.overflow = '';
+        }
+
+        function changeMainImage(newSrc, clickedThumb) {
+            const mainImage = document.getElementById('mainImage');
+            if (mainImage) {
+                mainImage.src = newSrc;
+                const thumbnails = clickedThumb.parentElement.querySelectorAll('img');
+                thumbnails.forEach(thumb => {
+                    thumb.classList.remove('border-blue-500');
+                    thumb.classList.add('border-gray-300');
+                });
+                clickedThumb.classList.remove('border-gray-300');
+                clickedThumb.classList.add('border-blue-500');
+            }
+        }
+
+        function handleScroll() {
+            const scrollTop = window.scrollY;
+            const windowHeight = window.innerHeight;
+            const documentHeight = document.documentElement.scrollHeight;
+            const distanceFromBottom = documentHeight - (scrollTop + windowHeight);
+            if (distanceFromBottom <= 500 && currentQuery && hasMoreResults && !isLoading) {
+                performSearch(false);
+            }
+        }
+
+        const clearAllRecentsBtn = document.getElementById('clearAllRecentsBtn');
+
+        clearAllRecentsBtn.addEventListener('click', () => {
+            localStorage.removeItem('recentSearches');
+            updateRecentSearches();
+        });
+
+        window.addEventListener('scroll', handleScroll, { passive: true });
+        window.addEventListener('load', () => {
+            performSearch();
+        });
     </script>
 </body>
 
