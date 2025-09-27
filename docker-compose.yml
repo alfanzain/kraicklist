@@ -63,7 +63,7 @@ services:
     command: >
       certonly --webroot 
       --webroot-path=/var/www/certbot 
-      --email your-email@gmail.com 
+      --email alfanzaindev@domain.com
       --agree-tos 
       --no-eff-email 
       -d kraicklist.my.id 
