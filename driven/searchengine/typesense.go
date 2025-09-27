@@ -8,6 +8,7 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"time"
 )
 
 type TypesenseSearchEngine struct {
@@ -187,6 +188,7 @@ func (se *TypesenseSearchEngine) DropCollection() (bool, error) {
 
 func (se *TypesenseSearchEngine) ImportData(filepath string) (string, error) {
 	se.DropCollection()
+
 	_, err := se.CreateCollection()
 	if err != nil {
 		fmt.Println("Error creating collection:", err)
@@ -201,13 +203,28 @@ func (se *TypesenseSearchEngine) ImportData(filepath string) (string, error) {
 	url := se.BaseApiUrl + "/collections/" + se.CollectionName + "/documents/import?action=create"
 
 	fmt.Println("Importing documents...")
-	importResp, err := se.doStreamRequest(http.MethodPost, url, dataBuffer, "text/plain")
-	if err != nil {
-		fmt.Println("Error importing documents:", err)
-		return "", fmt.Errorf("failed to import documents: %v", err)
+
+	// Retry logic for import
+	maxRetries := 3
+	var importResp string
+	for i := 0; i < maxRetries; i++ {
+		importResp, err = se.doStreamRequest(http.MethodPost, url, dataBuffer, "text/plain")
+		if err != nil {
+			if i < maxRetries-1 {
+				fmt.Printf("Import attempt %d failed: %v, retrying...\n", i+1, err)
+				time.Sleep(time.Duration(i+2) * time.Second) // Exponential backoff
+				continue
+			}
+			fmt.Println("Error importing documents:", err)
+			return "", fmt.Errorf("failed to import documents after %d attempts: %v", maxRetries, err)
+		}
+		break
 	}
 
 	fmt.Println("Import response:", importResp)
+
+	// Wait a bit for processing
+	time.Sleep(5 * time.Second)
 
 	count, err := se.GetNumDocuments()
 	if err != nil {
@@ -215,7 +232,6 @@ func (se *TypesenseSearchEngine) ImportData(filepath string) (string, error) {
 	}
 
 	fmt.Printf("Number of documents in collection '%s': %d\n", se.CollectionName, count)
-
 	return importResp, nil
 }
 
