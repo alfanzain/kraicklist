@@ -28,7 +28,7 @@ func NewSearchEngine(cfg TypesenseSearchEngineConfig) (*TypesenseSearchEngine, e
 	client := typesense.NewClient(
 		typesense.WithServer(cfg.BaseApiUrl),
 		typesense.WithAPIKey(cfg.ApiKey),
-		typesense.WithConnectionTimeout(100*time.Second),
+		typesense.WithConnectionTimeout(120*time.Second),
 		typesense.WithCircuitBreakerMaxRequests(50),
 		typesense.WithCircuitBreakerInterval(2*time.Minute),
 		typesense.WithCircuitBreakerTimeout(30*time.Minute),
