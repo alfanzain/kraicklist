@@ -1,6 +1,7 @@
 package driver
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"strconv"
@@ -14,6 +15,7 @@ type Api struct {
 }
 
 type ApiConfig struct {
+	Ctx     context.Context
 	Service core.Service `validate:"nonnil"`
 }
 
@@ -50,42 +52,22 @@ func (a *Api) handleGetSearch(w http.ResponseWriter, r *http.Request) {
 		page, _ = strconv.Atoi(pageQuery)
 	}
 
-	resp, err := a.Service.GetSearch(q, "title,content,embedding", "embedding", perPage, page)
+	resp, err := a.Service.GetSearch(a.Ctx, q, perPage, page)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 
-	respStr, ok := resp.(string)
-	if !ok {
-		http.Error(w, "invalid response type", http.StatusInternalServerError)
-		return
-	}
-
-	var fullResp map[string]interface{}
-	if err := json.Unmarshal([]byte(respStr), &fullResp); err != nil {
-		http.Error(w, "failed to parse response", http.StatusInternalServerError)
-		return
-	}
-
-	results, ok := fullResp["results"].([]interface{})
-	if !ok || len(results) == 0 {
-		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(map[string]interface{}{
-			"data": nil,
-		})
-		return
-	}
-
 	respObj := SearchResponse{
 		Ok:   true,
-		Data: results[0],
+		Data: resp,
 		Ts:   time.Now().Unix(),
 	}
 
 	w.Header().Set("Content-Type", "application/json")
 	if err := json.NewEncoder(w).Encode(respObj); err != nil {
-		http.Error(w, "failed to encode response", http.StatusInternalServerError)
+		http.Error(w, "Failed to encode response", http.StatusInternalServerError)
 		return
 	}
+
 }

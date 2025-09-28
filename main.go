@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"log"
 	"net/http"
@@ -25,7 +26,7 @@ func main() {
 		log.Fatal(err)
 	}
 
-	// ctx := context.Background()
+	ctx := context.Background()
 
 	// initialize Typesense search engine
 	searchEngine, err := searchengine.NewSearchEngine(searchengine.TypesenseSearchEngineConfig{
@@ -36,7 +37,11 @@ func main() {
 	if err != nil {
 		log.Fatalf("failed initialize search engine: %v", err)
 	}
-	// searchEngine.ImportData("data.txt")
+
+	_, err = searchEngine.ImportData(ctx, "data.txt")
+	if err != nil {
+		log.Fatalf("failed import data: %v", err)
+	}
 
 	// initialize service
 	svc, err := core.NewService(core.ServiceConfig{
@@ -48,6 +53,7 @@ func main() {
 
 	// initialize handler
 	api, err := driver.NewApi(driver.ApiConfig{
+		Ctx:     ctx,
 		Service: svc,
 	})
 	if err != nil {
@@ -58,6 +64,7 @@ func main() {
 	fmt.Println("Server is listening on", cfg.Port)
 	err = http.ListenAndServe(fmt.Sprintf(":%s", cfg.Port), api.GetHandler())
 	if err != nil {
+		fmt.Println("Server is listeninsasdsadg on", cfg.Port)
 		log.Fatalf("unable to start server due: %v", err)
 	}
 }

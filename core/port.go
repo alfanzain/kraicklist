@@ -1,5 +1,11 @@
 package core
 
+import (
+	"context"
+
+	"github.com/typesense/typesense-go/v3/typesense/api"
+)
+
 type SearchEngine interface {
-	Search(q, queryBy, excludeFields string, perPage, page int) (interface{}, error)
+	Search(ctx context.Context, query string, perPage int, page int) (*api.SearchResult, error)
 }

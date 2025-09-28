@@ -1,7 +1,17 @@
 package core
 
+import (
+	"context"
+	"fmt"
+)
+
 type Service interface {
-	GetSearch(q, queryBy, excludeFields string, perPage, page int) (interface{}, error)
+	GetSearch(
+		ctx context.Context,
+		q string,
+		perPage,
+		page int,
+	) (interface{}, error)
 }
 
 type ServiceConfig struct {
@@ -18,6 +28,17 @@ func NewService(cfg ServiceConfig) (*service, error) {
 	}, nil
 }
 
-func (s *service) GetSearch(q, queryBy, excludeFields string, perPage, page int) (interface{}, error) {
-	return s.SearchEngine.Search(q, queryBy, excludeFields, perPage, page)
+func (s *service) GetSearch(
+	ctx context.Context,
+	q string,
+	perPage,
+	page int,
+) (interface{}, error) {
+	searchResult, err := s.SearchEngine.Search(ctx, q, perPage, page)
+	if err != nil {
+		return nil, fmt.Errorf("failed to search: %w", err)
+	}
+	fmt.Printf("Found %d results\n", *searchResult.Found)
+
+	return searchResult, nil
 }

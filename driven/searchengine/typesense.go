@@ -2,17 +2,20 @@ package searchengine
 
 import (
 	"bufio"
-	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
-	"io"
-	"net/http"
 	"os"
 	"time"
+
+	"github.com/typesense/typesense-go/v3/typesense"
+	"github.com/typesense/typesense-go/v3/typesense/api"
+	"github.com/typesense/typesense-go/v3/typesense/api/pointer"
 )
 
 type TypesenseSearchEngine struct {
 	TypesenseSearchEngineConfig
+	client *typesense.Client
 }
 
 type TypesenseSearchEngineConfig struct {
@@ -21,221 +24,88 @@ type TypesenseSearchEngineConfig struct {
 	CollectionName string `validate:"nonzero"`
 }
 
-type SearchRequest struct {
-	Q             string `json:"q"`
-	QueryBy       string `json:"query_by"`
-	Collection    string `json:"collection"`
-	Prefix        string `json:"prefix"`
-	VectorQuery   string `json:"vector_query,omitempty"`
-	ExcludeFields string `json:"exclude_fields"`
-	PerPage       int    `json:"per_page"`
-	Page          int    `json:"page,omitempty"`
-}
-
-type MultiSearch struct {
-	Searches []SearchRequest `json:"searches"`
-}
-
 func NewSearchEngine(cfg TypesenseSearchEngineConfig) (*TypesenseSearchEngine, error) {
+	client := typesense.NewClient(
+		typesense.WithServer(cfg.BaseApiUrl),
+		typesense.WithAPIKey(cfg.ApiKey),
+		typesense.WithConnectionTimeout(60*time.Second),
+		typesense.WithCircuitBreakerMaxRequests(50),
+		typesense.WithCircuitBreakerInterval(2*time.Minute),
+		typesense.WithCircuitBreakerTimeout(30*time.Minute),
+	)
+
 	return &TypesenseSearchEngine{
 		TypesenseSearchEngineConfig: cfg,
+		client:                      client,
 	}, nil
 }
 
-func (se *TypesenseSearchEngine) Search(
-	q,
-	queryBy,
-	excludeFields string,
-	perPage,
-	page int,
-) (interface{}, error) {
-	url := se.BaseApiUrl + "/multi_search"
-
-	payload := MultiSearch{
-		Searches: []SearchRequest{
-			{
-				Q:             q,
-				QueryBy:       queryBy,
-				Collection:    se.CollectionName,
-				Prefix:        "false",
-				VectorQuery:   "embedding:([], k: 200)",
-				ExcludeFields: excludeFields,
-				PerPage:       perPage,
-				Page:          page,
-			},
-		},
-	}
-
-	resp, err := se.doRequest(http.MethodPost, url, payload)
-	if err != nil {
-		return "", err
-	}
-
-	return resp, nil
+func (tse *TypesenseSearchEngine) CreateCollection(ctx context.Context, schema *api.CollectionSchema) error {
+	_, err := tse.client.Collections().Create(ctx, schema)
+	return err
 }
 
-type FieldEmbedConfig struct {
-	From        []string `json:"from"`
-	ModelConfig struct {
-		ModelName string `json:"model_name"`
-	} `json:"model_config"`
+func (tse *TypesenseSearchEngine) GetCollection(ctx context.Context) (*api.CollectionResponse, error) {
+	return tse.client.Collection(tse.CollectionName).Retrieve(ctx)
 }
 
-type Field struct {
-	Name  string            `json:"name"`
-	Type  string            `json:"type"`
-	Embed *FieldEmbedConfig `json:"embed,omitempty"`
-	Facet bool              `json:"facet,omitempty"`
-	Index bool              `json:"index,omitempty"`
-	Stem  bool              `json:"stem,omitempty"`
-	Sort  bool              `json:"sort,omitempty"`
+func (tse *TypesenseSearchEngine) DropCollection(ctx context.Context) error {
+	_, err := tse.client.Collection(tse.CollectionName).Delete(ctx)
+	return err
 }
 
-type CreateCollectionPayload struct {
-	Name   string  `json:"name"`
-	Fields []Field `json:"fields"`
-}
-
-type Advertisement struct {
-	ID        int64    `json:"id"`
-	Title     string   `json:"title"`
-	Content   string   `json:"content"`
-	ThumbURL  string   `json:"thumb_url"`
-	Tags      []string `json:"tags"`
-	UpdatedAt int64    `json:"updated_at"`
-	ImageURLs []string `json:"image_urls"`
-}
-
-type Advertisements []Advertisement
-
-func (se *TypesenseSearchEngine) CreateCollection() (string, error) {
-	payload := CreateCollectionPayload{
-		Name: se.CollectionName,
-		Fields: []Field{
-			{Name: "title", Type: "string"},
-			{Name: "content", Type: "string", Stem: true},
-			{Name: "thumb_url", Type: "string", Index: false},
-			{Name: "tags", Type: "string[]", Facet: true},
-			{Name: "updated_at", Type: "int64", Facet: true, Sort: true},
-			{Name: "image_urls", Type: "string[]", Index: false},
-			{
-				Name: "embedding",
-				Type: "float[]",
-				Embed: &FieldEmbedConfig{
-					From: []string{"content"},
-					ModelConfig: struct {
-						ModelName string `json:"model_name"`
-					}{
-						ModelName: "ts/all-MiniLM-L12-v2",
-					},
-				},
-			},
-		},
-	}
-
-	fmt.Println("Creating collection...")
-
-	url := se.BaseApiUrl + "/collections"
-	resp, err := se.doRequest(http.MethodPost, url, payload)
-	if err != nil {
-		return "", fmt.Errorf("collection creation failed: %v", err)
-	}
-	return resp, nil
-}
-
-func (se *TypesenseSearchEngine) GetNumDocuments() (int, error) {
-	url := se.BaseApiUrl + "/collections/" + se.CollectionName
-
-	respStr, err := se.doRequest(http.MethodGet, url, nil)
+func (tse *TypesenseSearchEngine) GetNumDocuments(ctx context.Context) (int64, error) {
+	collection, err := tse.GetCollection(ctx)
 	if err != nil {
 		return 0, err
 	}
-
-	var collectionInfo struct {
-		NumDocuments int `json:"num_documents"`
-	}
-	if err := json.Unmarshal([]byte(respStr), &collectionInfo); err != nil {
-		return 0, fmt.Errorf("failed to parse collection info: %v", err)
-	}
-
-	return collectionInfo.NumDocuments, nil
+	return int64(*collection.NumDocuments), nil
 }
 
-func (se *TypesenseSearchEngine) DropCollection() (bool, error) {
-	fmt.Println("Dropping collection...")
-
-	url := se.BaseApiUrl + "/collections/" + se.CollectionName
-
-	respStr, err := se.doRequest(http.MethodDelete, url, nil)
-	if err != nil {
-		fmt.Println("Error dropping collection:", err)
-		return false, err
-	}
-
-	var resp struct {
-		Name string `json:"name"`
-	}
-	if err := json.Unmarshal([]byte(respStr), &resp); err != nil {
-		return false, fmt.Errorf("failed to parse response: %v", err)
-	}
-
-	if resp.Name == se.CollectionName {
-		return true, nil
-	}
-
-	return false, fmt.Errorf("unexpected response: %s", respStr)
+func (tse *TypesenseSearchEngine) SearchCollection(ctx context.Context, searchParams *api.SearchCollectionParams) (*api.SearchResult, error) {
+	return tse.client.Collection(tse.CollectionName).Documents().Search(ctx, searchParams)
 }
 
-func (se *TypesenseSearchEngine) ImportData(filepath string) (string, error) {
-	se.DropCollection()
+func (tse *TypesenseSearchEngine) Search(
+	ctx context.Context,
+	query string,
+	perPage int,
+	page int,
+) (*api.SearchResult, error) {
+	phraseQuery := fmt.Sprintf("\"%s\"", query)
 
-	_, err := se.CreateCollection()
+	searchParams := &api.SearchCollectionParams{
+		Q: pointer.String(phraseQuery),
+		// QueryBy:              pointer.String("title,tags"),
+		QueryBy:              pointer.String("title, embedding"),
+		VectorQuery:          pointer.String("embedding:([], alpha: 0.8, distance_threshold: 1.0)"),
+		PrioritizeExactMatch: pointer.True(),
+		DropTokensThreshold:  pointer.Int(0),
+		ExcludeFields:        pointer.String("embedding"),
+		PerPage:              pointer.Int(perPage),
+		Page:                 pointer.Int(page),
+	}
+
+	// if filterBy != "" {
+	// 	searchParams.FilterBy = pointer.String(filterBy)
+	// }
+
+	// if sortBy != "" {
+	// 	searchParams.SortBy = &sortBy
+	// }
+
+	// Log the search parameters in a readable format
+	paramsJSON, err := json.MarshalIndent(searchParams, "", "  ")
 	if err != nil {
-		fmt.Println("Error creating collection:", err)
-		return "", err
+		fmt.Printf("Error marshaling search params: %v\n", err)
+	} else {
+		fmt.Printf("Searching with params:\n%s\n", string(paramsJSON))
 	}
 
-	dataBuffer, err := se.LoadData(filepath)
-	if err != nil {
-		return "", err
-	}
-
-	url := se.BaseApiUrl + "/collections/" + se.CollectionName + "/documents/import?action=create"
-
-	fmt.Println("Importing documents...")
-
-	// Retry logic for import
-	maxRetries := 3
-	var importResp string
-	for i := 0; i < maxRetries; i++ {
-		importResp, err = se.doStreamRequest(http.MethodPost, url, dataBuffer, "text/plain")
-		if err != nil {
-			if i < maxRetries-1 {
-				fmt.Printf("Import attempt %d failed: %v, retrying...\n", i+1, err)
-				time.Sleep(time.Duration(i+2) * time.Second) // Exponential backoff
-				continue
-			}
-			fmt.Println("Error importing documents:", err)
-			return "", fmt.Errorf("failed to import documents after %d attempts: %v", maxRetries, err)
-		}
-		break
-	}
-
-	fmt.Println("Import response:", importResp)
-
-	// Wait a bit for processing
-	time.Sleep(5 * time.Second)
-
-	count, err := se.GetNumDocuments()
-	if err != nil {
-		return importResp, fmt.Errorf("failed to get document count: %v", err)
-	}
-
-	fmt.Printf("Number of documents in collection '%s': %d\n", se.CollectionName, count)
-	return importResp, nil
+	return tse.SearchCollection(ctx, searchParams)
 }
 
-func (se *TypesenseSearchEngine) LoadData(filepath string) (*bytes.Buffer, error) {
+func (tse *TypesenseSearchEngine) LoadData(filepath string) ([]interface{}, error) {
 	fmt.Println("Loading data...")
 
 	file, err := os.Open(filepath)
@@ -245,7 +115,7 @@ func (se *TypesenseSearchEngine) LoadData(filepath string) (*bytes.Buffer, error
 	defer file.Close()
 
 	scanner := bufio.NewScanner(file)
-	var buf bytes.Buffer
+	var documents []interface{}
 
 	for scanner.Scan() {
 		line := scanner.Bytes()
@@ -255,6 +125,7 @@ func (se *TypesenseSearchEngine) LoadData(filepath string) (*bytes.Buffer, error
 			continue
 		}
 
+		// Ensure ID is string type for Typesense
 		if idVal, ok := doc["id"]; ok {
 			switch v := idVal.(type) {
 			case float64:
@@ -266,6 +137,7 @@ func (se *TypesenseSearchEngine) LoadData(filepath string) (*bytes.Buffer, error
 			case json.Number:
 				doc["id"] = v.String()
 			case string:
+				// Already a string, keep as is
 			default:
 				doc["id"] = fmt.Sprintf("%v", v)
 			}
@@ -273,78 +145,266 @@ func (se *TypesenseSearchEngine) LoadData(filepath string) (*bytes.Buffer, error
 			return nil, fmt.Errorf("missing 'id' field in document")
 		}
 
-		fixedLine, err := json.Marshal(doc)
-		if err != nil {
-			return nil, fmt.Errorf("failed to marshal fixed document: %v", err)
-		}
-
-		buf.Write(fixedLine)
-		buf.WriteByte('\n')
+		documents = append(documents, doc)
 	}
 
 	if err := scanner.Err(); err != nil {
 		return nil, fmt.Errorf("error scanning file: %v", err)
 	}
 
-	return &buf, nil
+	fmt.Printf("Loaded %d documents\n", len(documents))
+	return documents, nil
 }
 
-func (se *TypesenseSearchEngine) doRequest(method, url string, body interface{}) (string, error) {
-	var buf *bytes.Buffer
+func (tse *TypesenseSearchEngine) ImportData(ctx context.Context, filepath string) ([]*api.ImportDocumentResponse, error) {
+	// Drop existing collection
+	fmt.Println("Dropping existing collection...")
+	tse.DropCollection(ctx)
 
-	if body != nil {
-		data, err := json.Marshal(body)
+	// Keyword search schema
+	// schema := &api.CollectionSchema{
+	// 	Name: tse.CollectionName,
+	// 	Fields: []api.Field{
+	// 		{
+	// 			Name: "title",
+	// 			Type: "string",
+	// 		},
+	// 		{
+	// 			Name:  "content",
+	// 			Type:  "string",
+	// 			Index: pointer.False(),
+	// 		},
+	// 		{
+	// 			Name:  "tags",
+	// 			Type:  "string[]",
+	// 			Facet: pointer.True(),
+	// 		},
+	// 		{
+	// 			Name: "updated_at",
+	// 			Type: "int64",
+	// 		},
+	// 		{
+	// 			Name:     "thumb_url",
+	// 			Type:     "string",
+	// 			Optional: pointer.True(),
+	// 		},
+	// 		{
+	// 			Name:     "image_urls",
+	// 			Type:     "string[]",
+	// 			Optional: pointer.True(),
+	// 		},
+	// 	},
+	// 	DefaultSortingField: pointer.String("updated_at"),
+	// }
+
+	// Semantic search
+	schema := &api.CollectionSchema{
+		Name: tse.CollectionName,
+		Fields: []api.Field{
+			{
+				Name: "title",
+				Type: "string",
+			},
+			{
+				Name: "content",
+				Type: "string",
+			},
+			{
+				Name:  "tags",
+				Type:  "string[]",
+				Facet: pointer.True(),
+			},
+			{
+				Name: "updated_at",
+				Type: "int64",
+			},
+			{
+				Name:     "thumb_url",
+				Type:     "string",
+				Optional: pointer.True(),
+			},
+			{
+				Name:     "image_urls",
+				Type:     "string[]",
+				Optional: pointer.True(),
+			},
+			{
+				Name: "embedding",
+				Type: "float[]",
+				Embed: &struct {
+					From        []string `json:"from"`
+					ModelConfig struct {
+						AccessToken    *string `json:"access_token,omitempty"`
+						ApiKey         *string `json:"api_key,omitempty"`
+						ClientId       *string `json:"client_id,omitempty"`
+						ClientSecret   *string `json:"client_secret,omitempty"`
+						IndexingPrefix *string `json:"indexing_prefix,omitempty"`
+						ModelName      string  `json:"model_name"`
+						ProjectId      *string `json:"project_id,omitempty"`
+						QueryPrefix    *string `json:"query_prefix,omitempty"`
+						RefreshToken   *string `json:"refresh_token,omitempty"`
+						Url            *string `json:"url,omitempty"`
+					} `json:"model_config"`
+				}{
+					From: []string{"title", "tags", "content"},
+					ModelConfig: struct {
+						AccessToken    *string `json:"access_token,omitempty"`
+						ApiKey         *string `json:"api_key,omitempty"`
+						ClientId       *string `json:"client_id,omitempty"`
+						ClientSecret   *string `json:"client_secret,omitempty"`
+						IndexingPrefix *string `json:"indexing_prefix,omitempty"`
+						ModelName      string  `json:"model_name"`
+						ProjectId      *string `json:"project_id,omitempty"`
+						QueryPrefix    *string `json:"query_prefix,omitempty"`
+						RefreshToken   *string `json:"refresh_token,omitempty"`
+						Url            *string `json:"url,omitempty"`
+					}{
+						// ModelName: "ts/e5-large-v2",
+						ModelName: "ts/all-MiniLM-L12-v2",
+					},
+				},
+			},
+		},
+		DefaultSortingField: pointer.String("updated_at"),
+	}
+
+	// Create collection
+	fmt.Println("Creating collection...")
+	err := tse.CreateCollection(ctx, schema)
+	if err != nil {
+		return nil, fmt.Errorf("error creating collection: %v", err)
+	}
+
+	// Load data
+	documents, err := tse.LoadData(filepath)
+	if err != nil {
+		return nil, err
+	}
+
+	// Import parameters
+	params := &api.ImportDocumentsParams{
+		Action:    (*api.IndexAction)(pointer.String(string(api.Create))),
+		BatchSize: pointer.Int(10),
+	}
+
+	// Import documents with retry logic
+	fmt.Println("Importing documents...")
+	maxRetries := 3
+	var importResp []*api.ImportDocumentResponse
+
+	for i := 0; i < maxRetries; i++ {
+		importResp, err = tse.client.Collection(tse.CollectionName).Documents().Import(ctx, documents, params)
 		if err != nil {
-			return "", err
+			if i < maxRetries-1 {
+				fmt.Printf("Import attempt %d failed: %v, retrying...\n", i+1, err)
+				time.Sleep(time.Duration(i+2) * time.Second) // Exponential backoff
+				continue
+			}
+			return nil, fmt.Errorf("failed to import documents after %d attempts: %v", maxRetries, err)
 		}
-		buf = bytes.NewBuffer(data)
-	} else {
-		buf = &bytes.Buffer{}
+		break
 	}
 
-	req, err := http.NewRequest(method, url, buf)
+	// fmt.Printf("Import completed. Response: %+v\n", importResp)
+	fmt.Printf("Import completed.\n")
+
+	time.Sleep(2 * time.Second)
+
+	// Get document count
+	count, err := tse.GetNumDocuments(ctx)
 	if err != nil {
-		return "", err
+		return importResp, fmt.Errorf("failed to get document count: %v", err)
 	}
 
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("X-TYPESENSE-API-KEY", se.ApiKey)
-
-	client := &http.Client{}
-	resp, err := client.Do(req)
+	// Create synonyms
+	err = tse.SeedSynonyms(ctx)
 	if err != nil {
-		return "", err
-	}
-	defer resp.Body.Close()
-
-	respBody, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return "", err
+		return importResp, fmt.Errorf("failed to seed synonyms: %v", err)
 	}
 
-	return string(respBody), nil
+	fmt.Printf("Number of documents in collection '%s': %d\n", tse.CollectionName, count)
+	return importResp, nil
 }
 
-func (se *TypesenseSearchEngine) doStreamRequest(method, url string, documents *bytes.Buffer, contentType string) (string, error) {
-	req, err := http.NewRequest(method, url, documents)
+func (tse *TypesenseSearchEngine) CreateSynonyms(ctx context.Context, id string, schema *api.SearchSynonymSchema) error {
+	_, err := tse.client.Collection(tse.CollectionName).Synonyms().Upsert(ctx, id, schema)
 	if err != nil {
-		return "", err
+		return fmt.Errorf("failed to create android phone synonyms: %w", err)
 	}
 
-	req.Header.Set("X-TYPESENSE-API-KEY", se.ApiKey)
-	req.Header.Set("Content-Type", contentType)
+	return nil
+}
 
-	client := &http.Client{}
-	resp, err := client.Do(req)
+func (tse *TypesenseSearchEngine) ListSynonyms(ctx context.Context) ([]*api.SearchSynonym, error) {
+	synonyms, err := tse.client.Collection(tse.CollectionName).Synonyms().Retrieve(ctx)
 	if err != nil {
-		return "", err
-	}
-	defer resp.Body.Close()
-
-	respBody, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return "", err
+		return nil, fmt.Errorf("failed to retrieve synonyms: %w", err)
 	}
 
-	return string(respBody), nil
+	fmt.Printf("Found %d synonym groups:\n", len(synonyms))
+	for _, synonym := range synonyms {
+		fmt.Printf("Synonym ID: %s\n", *synonym.Id)
+		fmt.Printf("  Synonyms: %v\n", synonym.Synonyms)
+		if synonym.Root != nil {
+			fmt.Printf("  Root: %s\n", *synonym.Root)
+		}
+	}
+
+	return synonyms, nil
+}
+
+func (tse *TypesenseSearchEngine) GetSynonym(ctx context.Context, synonymID string) (*api.SearchSynonym, error) {
+	synonym, err := tse.client.Collection(tse.CollectionName).Synonym(synonymID).Retrieve(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("failed to retrieve synonym %s: %w", synonymID, err)
+	}
+
+	fmt.Printf("Synonym ID: %s\n", *synonym.Id)
+	fmt.Printf("Synonyms: %v\n", synonym.Synonyms)
+	if synonym.Root != nil {
+		fmt.Printf("Root: %s\n", *synonym.Root)
+	}
+
+	return synonym, nil
+}
+
+func (tse *TypesenseSearchEngine) DeleteSynonym(ctx context.Context, synonymID string) error {
+	_, err := tse.client.Collection(tse.CollectionName).Synonym(synonymID).Delete(ctx)
+	if err != nil {
+		return fmt.Errorf("failed to delete synonym %s: %w", synonymID, err)
+	}
+
+	fmt.Printf("Successfully deleted synonym: %s\n", synonymID)
+	return nil
+}
+
+// Seedings
+
+func (tse *TypesenseSearchEngine) SeedSynonyms(ctx context.Context) error {
+	var err error
+
+	// Android
+	err = tse.CreateSynonyms(ctx, "android-phone-synonyms", &api.SearchSynonymSchema{
+		Synonyms: []string{
+			"android phone",
+			"samsung galaxy",
+			"galaxy phone",
+			"android smartphone",
+			"samsung smartphone",
+			"android mobile",
+			"galaxy mobile",
+			"samsung mobile",
+		},
+	})
+	if err != nil {
+		return fmt.Errorf("failed to create android phone synonyms: %w", err)
+	}
+
+	synonymsResp, err := tse.ListSynonyms(ctx)
+	if err != nil {
+		return fmt.Errorf("failed to list synonyms: %w", err)
+	}
+
+	fmt.Printf("Successfully seeding %d synonym groups\n", len(synonymsResp))
+	return nil
 }
