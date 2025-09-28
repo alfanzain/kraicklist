@@ -72,10 +72,8 @@ func (tse *TypesenseSearchEngine) Search(
 	perPage int,
 	page int,
 ) (*api.SearchResult, error) {
-	phraseQuery := fmt.Sprintf("\"%s\"", query)
-
 	searchParams := &api.SearchCollectionParams{
-		Q: pointer.String(phraseQuery),
+		Q: pointer.String(query),
 		// QueryBy:              pointer.String("title,tags"),
 		QueryBy:              pointer.String("title, embedding"),
 		VectorQuery:          pointer.String("embedding:([], alpha: 0.8, distance_threshold: 1.0)"),
